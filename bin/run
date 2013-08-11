@@ -1,0 +1,38 @@
+#!/usr/bin/env python
+
+import sys
+if sys.version_info < (2, 7):
+    raise RuntimeError('old python')
+
+import os
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'lib'))
+
+from jsp import tokenize, parse
+
+
+def main():
+    tokenize.init_tokenize()
+    parse.init_parse()
+    data = unicode(open(sys.argv[1], 'r').read(), 'utf-8')
+    t = Timer()
+    toks = tokenize.tokenize(data)
+    ptree = parse.parse(toks)
+    print t.get_seconds(), 'seconds'
+    import pprint
+    pprint.pprint(toks)
+    print "\n\n"
+    for (level, node, item) in ptree.dump(0):
+        print "{:32s} {}{}".format(node.__class__.__name__, '    '*level, unicode(item).encode('UTF-8'))
+
+
+class Timer(object):
+    def __init__(self):
+        self._start = os.times()
+    
+    def get_seconds(self):
+        stop = os.times()
+        return stop[0]+stop[1] - (self._start[0]+self._start[1])
+
+
+if __name__ == '__main__':
+    main()

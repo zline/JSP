@@ -1,0 +1,5 @@
+- FunctionExpression support, full grammar support
+- `undefined' handling (not a keyword)
+- automatic semicolon insertion
+- tokens / /= and regexp token - context-dependant
+- current version of Ecma-script support
