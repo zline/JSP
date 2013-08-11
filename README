@@ -2,3 +2,5 @@ JavaScript Parser
 =================
 
 Just for fun - ECMAScript (3rd edition) parser implemented in python. Or, simply, javascript parser.
+
+WARN NOTE: its not fully functional yet, work is still in progress, see TODO
