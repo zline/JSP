@@ -85,6 +85,7 @@ def init_parse():
     ExpressionNoIn = BinOpParser(AssignmentExpressionNoIn, TokenParser(tokenize.Punctuator, u","))
 
     
+    VariableDeclarationNoIn = VariableDeclarationParser(AssignmentExpressionNoIn)
     VariableDeclarationList = VariableDeclarationListParser(AssignmentExpression)
     VariableDeclarationListNoIn = VariableDeclarationListParser(AssignmentExpressionNoIn)
     
@@ -95,6 +96,8 @@ def init_parse():
     ExpressionStatement = ExpressionStatementParser(Expression)
     IfStatement = IfStatementParser(Expression, Statement)
     WhileStatement = WhileStatementParser(Expression, Statement)
+    ForStatement = ForStatementParser(ExpressionNoIn, Expression, Statement, VariableDeclarationListNoIn, LeftHandSideExpression,
+        VariableDeclarationNoIn)
     
     # TODO
     # .. other statements ..
@@ -106,7 +109,7 @@ def init_parse():
     # TODO order of alternatives of Statement!
 
     
-    _PARSER = ExpressionStatement
+    _PARSER = ForStatement
 
 
 def parse(toks):
@@ -710,6 +713,52 @@ class WhileStatementParser(AltParser):
         
         super(WhileStatementParser, self).__init__((PreWhileStatementParser(), PostWhileStatementParser()))
 
+class ForStatementParser(AltParser):
+    def __init__(self, ExpressionNoIn, Expression, Statement, VariableDeclarationListNoIn, LeftHandSideExpression,
+        VariableDeclarationNoIn):
+        
+        class ClassicForStatementParser(SeqParser):
+            def __init__(self):
+                super(ClassicForStatementParser, self).__init__((
+                    TokenParser(tokenize.Keyword, u"for"),
+                    TokenParser(tokenize.Punctuator, u"("),
+                    AltParser((
+                        SeqParser((TokenParser(tokenize.Keyword, u"var"), VariableDeclarationListNoIn), pick_node=1),
+                        OptParser(ExpressionNoIn)
+                    )),
+                    TokenParser(tokenize.Punctuator, u";"),
+                    OptParser(Expression),
+                    TokenParser(tokenize.Punctuator, u";"),
+                    OptParser(Expression),
+                    TokenParser(tokenize.Punctuator, u")"),
+                    Statement
+                ))
+            def mknode(self, subtree_list):
+                return PTreeForStatementNode(expr_first=subtree_list[2], expr_second=subtree_list[4], 
+                    expr_third=subtree_list[6], statement=subtree_list[8])
+        
+        class ForInStatementParser(SeqParser):
+            def __init__(self):
+                super(ForInStatementParser, self).__init__((
+                    TokenParser(tokenize.Keyword, u"for"),
+                    TokenParser(tokenize.Punctuator, u"("),
+                    AltParser((
+                        SeqParser((TokenParser(tokenize.Keyword, u"var"), VariableDeclarationNoIn), pick_node=1),
+                        OptParser(LeftHandSideExpression)
+                    )),
+                    TokenParser(tokenize.Keyword, u"in"),
+                    OptParser(Expression),
+                    TokenParser(tokenize.Punctuator, u")"),
+                    Statement
+                ))
+            def mknode(self, subtree_list):
+                if type(subtree_list[2]) == tuple:
+                    subtree_list[2] = PTreeVariableDeclarationListNode(declaration_it=(subtree_list[2], ))  # var
+                return PTreeForInStatementNode(expr_first=subtree_list[2], expr_second=subtree_list[4], 
+                    statement=subtree_list[6])
+        
+        super(ForStatementParser, self).__init__((ClassicForStatementParser(), ForInStatementParser()))
+
 
 class PTreeNode(object):
     __metaclass__ = ABCMeta
@@ -942,4 +991,43 @@ class PTreeWhileStatementNode(PTreeStatementNode):
             yield (level, self, codeword)
             for (slevel, node, item) in subnode.dump(level + 1):
                 yield (slevel, node, item)
+
+class PTreeForStatementNode(PTreeStatementNode):
+    def __init__(self, expr_first, expr_second, expr_third, statement, **kwargs):
+        super(PTreeForStatementNode, self).__init__(**kwargs)
+        self.expr_first = expr_first
+        self.expr_second = expr_second
+        self.expr_third = expr_third
+        self.statement = statement
+
+    def dump(self, level):
+        yield (level, self, u'for (')
+        for (idx, expr) in enumerate((self.expr_first, self.expr_second, self.expr_third)):
+            if idx:
+                yield (level, self, u';')
+            if expr:
+                for (slevel, node, item) in expr.dump(level + 1):
+                    yield (slevel, node, item)
+        yield (level, self, u')')
+        for (slevel, node, item) in self.statement.dump(level + 1):
+            yield (slevel, node, item)
+
+class PTreeForInStatementNode(PTreeStatementNode):
+    def __init__(self, expr_first, expr_second, statement, **kwargs):
+        super(PTreeForInStatementNode, self).__init__(**kwargs)
+        self.expr_first = expr_first
+        self.expr_second = expr_second
+        self.statement = statement
+
+    def dump(self, level):
+        yield (level, self, u'for (')
+        for (slevel, node, item) in self.expr_first.dump(level + 1):
+            yield (slevel, node, item)
+        yield (level, self, u'in')
+        for (slevel, node, item) in self.expr_second.dump(level + 1):
+            yield (slevel, node, item)
+        yield (level, self, u')')
+        for (slevel, node, item) in self.statement.dump(level + 1):
+            yield (slevel, node, item)
+
 
