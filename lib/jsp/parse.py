@@ -977,7 +977,7 @@ class PTreeIfStatementNode(PTreeStatementNode):
 
 class PTreeWhileStatementNode(PTreeStatementNode):
     def __init__(self, condition, statement, is_postcondition, **kwargs):
-        super(PTreeWhileStatementNode, self).__init__(**kwargs)
+        super(PTreeWhileStatementNode, self).__init__(labels=(u'empty', ), **kwargs)
         self.condition = condition
         self.statement = statement
         self.is_postcondition = is_postcondition
@@ -994,7 +994,7 @@ class PTreeWhileStatementNode(PTreeStatementNode):
 
 class PTreeForStatementNode(PTreeStatementNode):
     def __init__(self, expr_first, expr_second, expr_third, statement, **kwargs):
-        super(PTreeForStatementNode, self).__init__(**kwargs)
+        super(PTreeForStatementNode, self).__init__(labels=(u'empty', ), **kwargs)
         self.expr_first = expr_first
         self.expr_second = expr_second
         self.expr_third = expr_third
@@ -1014,7 +1014,7 @@ class PTreeForStatementNode(PTreeStatementNode):
 
 class PTreeForInStatementNode(PTreeStatementNode):
     def __init__(self, expr_first, expr_second, statement, **kwargs):
-        super(PTreeForInStatementNode, self).__init__(**kwargs)
+        super(PTreeForInStatementNode, self).__init__(labels=(u'empty', ), **kwargs)
         self.expr_first = expr_first
         self.expr_second = expr_second
         self.statement = statement
@@ -1029,5 +1029,4 @@ class PTreeForInStatementNode(PTreeStatementNode):
         yield (level, self, u')')
         for (slevel, node, item) in self.statement.dump(level + 1):
             yield (slevel, node, item)
-
 
