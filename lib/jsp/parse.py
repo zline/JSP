@@ -12,10 +12,11 @@ def init_parse():
     ArrayLiteral = ArrayLiteralParser(AssignmentExpression)
     ObjectLiteral = ObjectLiteralParser(AssignmentExpression)
     
+    Identifier = TokenParser(tokenize.Identifier)
     Expression = ForwardDeclaredParser()
     PrimaryExpression = AltParser((
         TokenParser(tokenize.Keyword, u"this"),
-        TokenParser(tokenize.Identifier),
+        Identifier,
         TokenParser(tokenize.Literal),
         ArrayLiteral,
         ObjectLiteral,
@@ -98,6 +99,11 @@ def init_parse():
     WhileStatement = WhileStatementParser(Expression, Statement)
     ForStatement = ForStatementParser(ExpressionNoIn, Expression, Statement, VariableDeclarationListNoIn, LeftHandSideExpression,
         VariableDeclarationNoIn)
+    ContinueStatement = ControlStatementParser(u"continue", Identifier, PTreeContinueStatementNode)
+    BreakStatement = ControlStatementParser(u"break", Identifier, PTreeBreakStatementNode)
+    ReturnStatement = ControlStatementParser(u"return", Expression, PTreeReturnStatementNode)
+    WithStatement = WithStatementParser(Expression, Statement)
+    SwitchStatement = SwitchStatementParser(Expression, Statement)
     
     # TODO
     # .. other statements ..
@@ -109,7 +115,7 @@ def init_parse():
     # TODO order of alternatives of Statement!
 
     
-    _PARSER = ForStatement
+    _PARSER = SwitchStatement
 
 
 def parse(toks):
@@ -589,15 +595,15 @@ class AssignmentExpressionParser(SeqParser):
     def mknode(self, subtree_list):
         return PTreeAssignmentExpressionNode(subtree_list[0], subtree_list[1], subtree_list[2])
 
+class StatementListParser(RepeatedParser):
+    def __init__(self, Statement):
+        super(StatementListParser, self).__init__(Statement, min_matches=0, node_class=list)
+
 class BlockParser(SeqParser):
     def __init__(self, Statement):
         super(BlockParser, self).__init__((
             TokenParser(tokenize.Punctuator, u"{"),
-            RepeatedParser(
-                Statement,
-                min_matches=0,
-                node_class=list
-            ),
+            StatementListParser(Statement),
             TokenParser(tokenize.Punctuator, u"}"),
         ))
     
@@ -758,6 +764,73 @@ class ForStatementParser(AltParser):
                     statement=subtree_list[6])
         
         super(ForStatementParser, self).__init__((ClassicForStatementParser(), ForInStatementParser()))
+
+class ControlStatementParser(SeqParser):
+    def __init__(self, ctrl_keyword, ctrl_option_parser, node_class):
+        super(ControlStatementParser, self).__init__((
+            TokenParser(tokenize.Keyword, ctrl_keyword),
+            keep_line_terms(LookAheadParser(TokenParser(tokenize.LineTerminator), inverse=True)),
+            OptParser(ctrl_option_parser),
+            TokenParser(tokenize.Punctuator, u";")
+        ))
+        self.node_class = node_class
+    
+    def mknode(self, subtree_list):
+        return self.node_class(subtree_list[2])
+
+class WithStatementParser(SeqParser):
+    def __init__(self, Expression, Statement):
+        super(WithStatementParser, self).__init__((
+            TokenParser(tokenize.Keyword, u"with"),
+            TokenParser(tokenize.Punctuator, u"("),
+            Expression,
+            TokenParser(tokenize.Punctuator, u")"),
+            Statement
+        ))
+    
+    def mknode(self, subtree_list):
+        return PTreeWithStatementNode(expr=subtree_list[2], statement=subtree_list[4])
+
+class SwitchStatementParser(SeqParser):
+    def __init__(self, Expression, Statement):
+        
+        class CaseNDefaultClause(AltParser):
+            def __init__(self):
+                StatementList = StatementListParser(Statement)
+                super(CaseNDefaultClause, self).__init__((
+                    SeqParser((
+                        TokenParser(tokenize.Keyword, u"case"),
+                        Expression,
+                        TokenParser(tokenize.Punctuator, u":"),
+                        StatementList
+                    ), node_class=list),
+                    SeqParser((
+                        TokenParser(tokenize.Keyword, u"default"),
+                        TokenParser(tokenize.Punctuator, u":"),
+                        StatementList
+                    ), node_class=list)
+                ))
+            
+            def change_node(self, ptree):
+                if ptree[0].token.data == u"case":
+                    return (ptree[1], ptree[3])
+                else:
+                    return (ptree[0], ptree[2])
+        
+        CaseClauses = RepeatedParser(CaseNDefaultClause(), min_matches=0, node_class=list)
+        super(SwitchStatementParser, self).__init__((
+            TokenParser(tokenize.Keyword, u"switch"),
+            TokenParser(tokenize.Punctuator, u"("),
+            Expression,
+            TokenParser(tokenize.Punctuator, u")"),
+            TokenParser(tokenize.Punctuator, u"{"),
+            CaseClauses,
+            TokenParser(tokenize.Punctuator, u"}"),
+        ))
+
+    def mknode(self, subtree_list):
+        return PTreeSwitchStatementNode(expr=subtree_list[2], case_block=subtree_list[5])
+
 
 
 class PTreeNode(object):
@@ -1030,3 +1103,64 @@ class PTreeForInStatementNode(PTreeStatementNode):
         for (slevel, node, item) in self.statement.dump(level + 1):
             yield (slevel, node, item)
 
+class PTreeControlStatementNode(PTreeStatementNode):
+    def __init__(self, ctrl_type, ctrl_option=None, **kwargs):
+        super(PTreeControlStatementNode, self).__init__(**kwargs)
+        self.ctrl_type = ctrl_type
+        self.ctrl_option = ctrl_option
+
+    def dump(self, level):
+        yield (level, self, self.ctrl_type)
+        if self.ctrl_option is not None:
+            for (slevel, node, item) in self.ctrl_option.dump(level + 1):
+                yield (slevel, node, item)
+
+class PTreeContinueStatementNode(PTreeControlStatementNode):
+    def __init__(self, ctrl_option):
+        super(PTreeContinueStatementNode, self).__init__(ctrl_type=u'continue', ctrl_option=ctrl_option)
+
+class PTreeBreakStatementNode(PTreeControlStatementNode):
+    def __init__(self, ctrl_option):
+        super(PTreeBreakStatementNode, self).__init__(ctrl_type=u'break', ctrl_option=ctrl_option)
+
+class PTreeReturnStatementNode(PTreeControlStatementNode):
+    def __init__(self, ctrl_option):
+        super(PTreeReturnStatementNode, self).__init__(ctrl_type=u'return', ctrl_option=ctrl_option)
+
+class PTreeWithStatementNode(PTreeStatementNode):
+    def __init__(self, expr, statement, **kwargs):
+        super(PTreeWithStatementNode, self).__init__(**kwargs)
+        self.expr = expr
+        self.statement = statement
+
+    def dump(self, level):
+        yield (level, self, u"with (")
+        for (slevel, node, item) in self.expr.dump(level + 1):
+            yield (slevel, node, item)
+        yield (level, self, u")")
+        for (slevel, node, item) in self.statement.dump(level + 1):
+            yield (slevel, node, item)
+
+class PTreeSwitchStatementNode(PTreeStatementNode):
+    def __init__(self, expr, case_block, **kwargs):
+        super(PTreeSwitchStatementNode, self).__init__(**kwargs)
+        self.expr = expr
+        assert type(case_block) == list
+        self.case_block = case_block    # list of (case expr, StatementList)
+
+    def dump(self, level):
+        yield (level, self, u"switch (")
+        for (slevel, node, item) in self.expr.dump(level + 1):
+            yield (slevel, node, item)
+        yield (level, self, u")")
+        
+        for case in self.case_block:
+            assert type(case) == tuple
+            yield (level + 1, self, u"case")
+            for (slevel, node, item) in case[0].dump(level + 2):
+                yield (slevel, node, item)
+            yield (level + 1, self, u":")
+            assert type(case[1]) == list
+            for statement in case[1]:
+                for (slevel, node, item) in statement.dump(level + 2):
+                    yield (slevel, node, item)
