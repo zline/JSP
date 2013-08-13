@@ -104,6 +104,8 @@ def init_parse():
     ReturnStatement = ControlStatementParser(u"return", Expression, PTreeReturnStatementNode)
     WithStatement = WithStatementParser(Expression, Statement)
     SwitchStatement = SwitchStatementParser(Expression, Statement)
+    LabelledStatement = LabelledStatementParser(Statement)
+    ThrowStatement = ControlStatementParser(u"throw", Expression, PTreeThrowStatementNode, opt_required=True)
     
     # TODO
     # .. other statements ..
@@ -115,7 +117,7 @@ def init_parse():
     # TODO order of alternatives of Statement!
 
     
-    _PARSER = SwitchStatement
+    _PARSER = LabelledStatement
 
 
 def parse(toks):
@@ -766,11 +768,11 @@ class ForStatementParser(AltParser):
         super(ForStatementParser, self).__init__((ClassicForStatementParser(), ForInStatementParser()))
 
 class ControlStatementParser(SeqParser):
-    def __init__(self, ctrl_keyword, ctrl_option_parser, node_class):
+    def __init__(self, ctrl_keyword, ctrl_option_parser, node_class, opt_required=False):
         super(ControlStatementParser, self).__init__((
             TokenParser(tokenize.Keyword, ctrl_keyword),
             keep_line_terms(LookAheadParser(TokenParser(tokenize.LineTerminator), inverse=True)),
-            OptParser(ctrl_option_parser),
+            ctrl_option_parser if opt_required else OptParser(ctrl_option_parser),
             TokenParser(tokenize.Punctuator, u";")
         ))
         self.node_class = node_class
@@ -831,6 +833,16 @@ class SwitchStatementParser(SeqParser):
     def mknode(self, subtree_list):
         return PTreeSwitchStatementNode(expr=subtree_list[2], case_block=subtree_list[5])
 
+class LabelledStatementParser(SeqParser):
+    def __init__(self, Statement):
+        super(LabelledStatementParser, self).__init__((
+            TokenParser(tokenize.Identifier),
+            TokenParser(tokenize.Punctuator, u":"),
+            Statement))
+
+    def mknode(self, subtree_list):
+        subtree_list[2].labels.add(subtree_list[0].token.data)
+        return subtree_list[2]
 
 
 class PTreeNode(object):
@@ -1126,6 +1138,11 @@ class PTreeBreakStatementNode(PTreeControlStatementNode):
 class PTreeReturnStatementNode(PTreeControlStatementNode):
     def __init__(self, ctrl_option):
         super(PTreeReturnStatementNode, self).__init__(ctrl_type=u'return', ctrl_option=ctrl_option)
+
+class PTreeThrowStatementNode(PTreeControlStatementNode):
+    def __init__(self, ctrl_option):
+        assert ctrl_option is not None
+        super(PTreeThrowStatementNode, self).__init__(ctrl_type=u'throw', ctrl_option=ctrl_option)
 
 class PTreeWithStatementNode(PTreeStatementNode):
     def __init__(self, expr, statement, **kwargs):
