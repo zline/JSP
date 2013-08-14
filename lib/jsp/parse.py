@@ -106,10 +106,27 @@ def init_parse():
     SwitchStatement = SwitchStatementParser(Expression, Statement)
     LabelledStatement = LabelledStatementParser(Statement)
     ThrowStatement = ControlStatementParser(u"throw", Expression, PTreeThrowStatementNode, opt_required=True)
+    TryStatement = TryStatementParser(Block)
+    # TODO fast, hash-based switching in AltParser below
+    Statement.target = AltParser((
+        EmptyStatement,         # ;
+        Block,                  # {
+        ReturnStatement,        # return
+        IfStatement,            # if
+        ForStatement,           # for
+        WhileStatement,         # while, do
+        VariableStatement,      # var
+        ContinueStatement,      # continue
+        BreakStatement,         # break
+        WithStatement,          # with
+        SwitchStatement,        # switch
+        ThrowStatement,         # throw
+        TryStatement,           # try
+        ExpressionStatement,    # 
+        LabelledStatement,      #
+    ))
     
     # TODO
-    # .. other statements ..
-    # Statement = AltParser(( .. statements .. ))
     # Program = ...
     # _PARSER = Program
     
@@ -117,7 +134,7 @@ def init_parse():
     # TODO order of alternatives of Statement!
 
     
-    _PARSER = LabelledStatement
+    _PARSER = Statement
 
 
 def parse(toks):
@@ -844,6 +861,45 @@ class LabelledStatementParser(SeqParser):
         subtree_list[2].labels.add(subtree_list[0].token.data)
         return subtree_list[2]
 
+class TryStatementParser(Parser):
+    def __init__(self, Block):
+        
+        class CatchParser(SeqParser):
+            def __init__(self):
+                super(CatchParser, self).__init__((
+                    TokenParser(tokenize.Keyword, u"catch"),
+                    TokenParser(tokenize.Punctuator, u"("),
+                    TokenParser(tokenize.Identifier),
+                    TokenParser(tokenize.Punctuator, u")"),
+                    Block))
+
+            def mknode(self, subtree_list):
+                return (subtree_list[2], subtree_list[4])
+        
+        Finally = SeqParser((
+            TokenParser(tokenize.Keyword, u"finally"),
+            Block), pick_node=1)
+        
+        self._parser = SeqParser((
+            TokenParser(tokenize.Keyword, u"try"),
+            Block,
+            CatchParser(),
+            Finally), node_class=list, optional_right_items=2)
+
+    def do_parse(self, toks, start):
+        ret = self._parser.parse(toks, start)
+        if ret is None:
+            return None
+        (subtree_list, start) = ret
+        if subtree_list[2] is None and subtree_list[3] is None:
+            return None
+        
+        return PTreeTryStatementNode(
+            block=subtree_list[1],
+            catch_identifier=None if subtree_list[2] is None else subtree_list[2][0],
+            catch_block=None if subtree_list[2] is None else subtree_list[2][1],
+            finally_block=subtree_list[3])
+
 
 class PTreeNode(object):
     __metaclass__ = ABCMeta
@@ -1009,7 +1065,7 @@ class PTreeStatementNode(PTreeNode):
 
 class PTreeBlockNode(PTreeListNode, PTreeStatementNode):
     def __init__(self, st_list):
-        super(PTreeBlockNode, self).__init__(item_list=st_list)
+        super(PTreeBlockNode, self).__init__(item_list=st_list, opening_bracket=u'{', closing_bracket=u'}')
 
 class PTreeVariableDeclarationListNode(PTreeNode):
     def __init__(self, declaration_it, **kwargs):
@@ -1178,6 +1234,32 @@ class PTreeSwitchStatementNode(PTreeStatementNode):
                 yield (slevel, node, item)
             yield (level + 1, self, u":")
             assert type(case[1]) == list
-            for statement in case[1]:
-                for (slevel, node, item) in statement.dump(level + 2):
-                    yield (slevel, node, item)
+            for (slevel, node, item) in self._dump_subnodes(level + 2, case[1]):
+                yield (slevel, node, item)
+
+class PTreeTryStatementNode(PTreeStatementNode):
+    def __init__(self, block, catch_identifier, catch_block, finally_block, **kwargs):
+        super(PTreeTryStatementNode, self).__init__(**kwargs)
+        assert catch_block is not None or finally_block is not None
+        assert (catch_identifier is None) == (catch_block is None)
+        self.block = block
+        self.catch_identifier = catch_identifier
+        self.catch_block = catch_block
+        self.finally_block = finally_block
+
+    def dump(self, level):
+        yield (level, self, u"try")
+        for (slevel, node, item) in self.block.dump(level + 1):
+            yield (slevel, node, item)
+        if self.catch_block is not None:
+            yield (level, self, u"catch")
+            for (slevel, node, item) in self.catch_identifier.dump(level + 1):
+                yield (slevel, node, item)
+            for (slevel, node, item) in self.catch_block.dump(level + 1):
+                yield (slevel, node, item)
+        if self.finally_block is not None:
+            yield (level, self, u"finally")
+            for (slevel, node, item) in self.finally_block.dump(level + 1):
+                yield (slevel, node, item)
+
+
