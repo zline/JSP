@@ -929,6 +929,11 @@ class FunctionParser(SeqParser):
 
 
 class PTreeNode(object):
+    """
+    Base class of hierarchy of parse tree nodes.
+    The most important goal of this hierarchy is to represent script code in a machine-friendly way in python code.
+    dump methods have purely demonstrative purpose.
+    """
     __metaclass__ = ABCMeta
     
     @abstractmethod
