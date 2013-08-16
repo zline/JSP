@@ -1,4 +1,4 @@
-- FunctionExpression support, full grammar support
+- bugfix of double multiline comments bug (function markFunction in jquery)
 - `undefined' handling (not a keyword)
 - automatic semicolon insertion
 - tokens / /= and regexp token - context-dependant

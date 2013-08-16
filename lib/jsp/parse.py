@@ -22,7 +22,8 @@ def init_parse():
         ObjectLiteral,
         ParenthesedExpressionParser(Expression)
     ))
-    FunctionExpression = TokenParser(tokenize.Keyword, u"function") # FIXME FIXME TODO
+    FunctionExpression = ForwardDeclaredParser()
+    FunctionDeclaration = ForwardDeclaredParser()
     MemberExpression = MemberExpressionParser(PrimaryExpression, FunctionExpression, AssignmentExpression, Expression)
     NewExpression = NewExpressionParser(MemberExpression)
     CallExpression = CallExpressionParser(MemberExpression, AssignmentExpression, Expression)
@@ -126,15 +127,13 @@ def init_parse():
         LabelledStatement,      #
     ))
     
-    # TODO
-    # Program = ...
-    # _PARSER = Program
+    SourceElements = SourceElementsParser(Statement, FunctionDeclaration)
+    FunctionExpression.target = FunctionParser(OptParser(Identifier), SourceElements, PTreeFunctionExpressionNode)
+    FunctionDeclaration.target = FunctionParser(Identifier, SourceElements, PTreeFunctionDeclarationNode)
     
+    Program = SourceElements
     
-    # TODO order of alternatives of Statement!
-
-    
-    _PARSER = Statement
+    _PARSER = Program
 
 
 def parse(toks):
@@ -890,15 +889,43 @@ class TryStatementParser(Parser):
         ret = self._parser.parse(toks, start)
         if ret is None:
             return None
-        (subtree_list, start) = ret
+        (subtree_list, end) = ret
         if subtree_list[2] is None and subtree_list[3] is None:
             return None
         
-        return PTreeTryStatementNode(
+        return (PTreeTryStatementNode(
             block=subtree_list[1],
             catch_identifier=None if subtree_list[2] is None else subtree_list[2][0],
             catch_block=None if subtree_list[2] is None else subtree_list[2][1],
-            finally_block=subtree_list[3])
+            finally_block=subtree_list[3]), end)
+
+class SourceElementsParser(RepeatedParser):
+    def __init__(self, Statement, FunctionDeclaration):
+        super(SourceElementsParser, self).__init__(
+            AltParser((FunctionDeclaration, Statement)), node_class=PTreeSourceElementsNode)
+
+class FunctionParser(SeqParser):
+    def __init__(self, name_parser, FunctionBody, node_class):
+        FormalParameterList = RepeatedParser(
+            TokenParser(tokenize.Identifier),
+            min_matches=0,
+            node_class=list,
+            separator=TokenParser(tokenize.Punctuator, u",")
+        )
+        
+        super(FunctionParser, self).__init__((
+            TokenParser(tokenize.Keyword, u"function"),
+            name_parser,
+            TokenParser(tokenize.Punctuator, u"("),
+            FormalParameterList,
+            TokenParser(tokenize.Punctuator, u")"),
+            TokenParser(tokenize.Punctuator, u"{"),
+            FunctionBody,
+            TokenParser(tokenize.Punctuator, u"}")),
+            node_class=node_class)
+
+    def mknode(self, subtree_list):
+        return self.node_class(name=subtree_list[1], formal_params=subtree_list[3], body=subtree_list[6])
 
 
 class PTreeNode(object):
@@ -1262,4 +1289,37 @@ class PTreeTryStatementNode(PTreeStatementNode):
             for (slevel, node, item) in self.finally_block.dump(level + 1):
                 yield (slevel, node, item)
 
+class PTreeSourceElementsNode(PTreeListNode):
+    def __init__(self, item_list):
+        super(PTreeSourceElementsNode, self).__init__(item_list=item_list)
+
+class PTreeFunctionBaseNode(PTreeStatementNode):
+    def __init__(self, name, formal_params, body, **kwargs):
+        super(PTreeFunctionBaseNode, self).__init__(**kwargs)
+        self.name = name
+        self.formal_params = formal_params
+        self.body = body
+
+    def dump(self, level):
+        yield (level, self, u"function")
+        if self.name is not None:
+            for (slevel, node, item) in self.name.dump(level + 1):
+                yield (slevel, node, item)
+        yield (level, self, u"(")
+        for (slevel, node, item) in self._dump_subnodes(level + 1, self.formal_params):
+            yield (slevel, node, item)
+        yield (level, self, u")")
+        yield (level, self, u"{")
+        for (slevel, node, item) in self.body.dump(level):
+            yield (slevel, node, item)
+        yield (level, self, u"}")
+
+class PTreeFunctionDeclarationNode(PTreeFunctionBaseNode):
+    def __init__(self, **kwargs):
+        super(PTreeFunctionDeclarationNode, self).__init__(**kwargs)
+        if self.name is None:
+            raise ValueError('function declaration without a name')
+
+class PTreeFunctionExpressionNode(PTreeFunctionBaseNode):
+    pass
 
