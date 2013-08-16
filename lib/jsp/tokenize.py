@@ -15,7 +15,7 @@ def init_tokenize():
     LineTerminator_tk = CharRangeTokenizer(LineTerminator, u'\u000A\u000D\u2028\u2029')
     
     MultiLineComment_tk = RegexTokenizer(MultiLineComment,
-        u"/\*.*\*/", re.DOTALL)
+        u"/\*.*?\*/", re.DOTALL)
     SingleLineComment_tk = SingleLineCommentTokenizer(LineTerminator_tk)
     
     Keyword_tk = KeywordTokenizer(Keyword,
