@@ -1068,7 +1068,7 @@ class PTreeConditionalExpressionNode(PTreeNode):
 
     def dump(self, level):
         yield (level, self, u"?")
-        for (slevel, node, item) in self.conf.dump(level + 1):
+        for (slevel, node, item) in self.cond.dump(level + 1):
             yield (slevel, node, item)
         yield (level, self, u"iftrue")
         for (slevel, node, item) in self.iftrue.dump(level + 1):
