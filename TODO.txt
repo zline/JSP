@@ -1,4 +1,3 @@
-- `undefined' handling (not a keyword)
 - automatic semicolon insertion
 - tokens / /= and regexp token - context-dependant
 - semantic checks of continue, break, return statements, labelled statements

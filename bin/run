@@ -13,7 +13,7 @@ from jsp import tokenize, parse
 def main():
     tokenize.init_tokenize()
     parse.init_parse()
-    data = unicode(open(sys.argv[1], 'r').read(), 'utf-8')
+    data = open(sys.argv[1], 'r').read()
     t = Timer()
     toks = tokenize.tokenize(data)
     ptree = parse.parse(toks)
@@ -21,8 +21,7 @@ def main():
     import pprint
     pprint.pprint(toks)
     print "\n\n"
-    for (level, node, item) in ptree.dump(0):
-        print "{:32s} {}{}".format(node.__class__.__name__, '    '*level, unicode(item).encode('UTF-8'))
+    parse.PTreeNode.simple_dump(ptree)
 
 
 class Timer(object):

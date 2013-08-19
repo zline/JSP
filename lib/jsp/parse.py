@@ -1,4 +1,5 @@
 
+import sys
 from abc import ABCMeta, abstractmethod
 
 from jsp import tokenize
@@ -390,7 +391,7 @@ class ObjectLiteralParser(SeqParser):
     def __init__(self, AssignmentExpression):
         PropertyNameParser = TokenParser((tokenize.Identifier, tokenize.StringLiteral, tokenize.NumericLiteral))
         ItemsParser = RepeatedParser(
-            SeqParser((PropertyNameParser, TokenParser(tokenize.Punctuator, u":"), AssignmentExpression)),
+            SeqParser((PropertyNameParser, TokenParser(tokenize.Punctuator, u":"), AssignmentExpression), node_class=tuple),
             min_matches=0,
             node_class=list,    # hack, see mknode
             separator=TokenParser(tokenize.Punctuator, u",")
@@ -402,10 +403,9 @@ class ObjectLiteralParser(SeqParser):
         ))
     
     def mknode(self, subtree_list):
-        items = subtree_list[1]
         filtered_list = list()
-        for i in xrange(0, len(items), 3):
-            filtered_list.append((items[i], items[i]+2))
+        for item in subtree_list[1]:
+            filtered_list.append((item[0], item[2]))
         
         return PTreeObjectLiteralNode(filtered_list)
 
@@ -531,7 +531,7 @@ class NewExpressionParser(AltParser):
     def change_node(self, ptree):
         if isinstance(ptree, list):
             assert ptree[0].token.data == u"new"
-            return PTreeCtorNode(ptree[1], list())
+            return PTreeCtorNode(ptree[1], PTreeArgumentsNode(list()))
         
         return ptree
 
@@ -570,6 +570,7 @@ class UnaryExpressionParser(SeqParser):
     
     def mknode(self, subtree_list):
         node = subtree_list[1]
+        subtree_list[0].reverse()
         for action in subtree_list[0]:
             node = PTreeUnaryExpressionNode(node, action)
         return node
@@ -932,7 +933,7 @@ class PTreeNode(object):
     """
     Base class of hierarchy of parse tree nodes.
     The most important goal of this hierarchy is to represent script code in a machine-friendly way in python code.
-    dump methods have purely demonstrative purpose.
+    *dump* methods have purely demonstrative purpose.
     """
     __metaclass__ = ABCMeta
     
@@ -945,6 +946,13 @@ class PTreeNode(object):
         for subnode in subnodes if isinstance(subnodes, (list, tuple)) else (subnodes, ):
             for (slevel, node, item) in subnode.dump(level):
                 yield (slevel, node, item)
+    
+    @staticmethod
+    def simple_dump(ptree, fh=None):
+        if fh is None:
+            fh = sys.stdout
+        for (level, node, item) in ptree.dump(0):
+            print >> fh, "{:32s} {}{}".format(node.__class__.__name__, '    '*level, unicode(item).encode('UTF-8'))
 
 
 class PTreeTokenNode(PTreeNode):

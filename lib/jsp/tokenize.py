@@ -66,6 +66,9 @@ def init_tokenize():
 def tokenize(data):
     global _TOKENIZERS
     
+    if not isinstance(data, unicode):
+        data = unicode(data, 'utf-8')
+    
     formatControlCleaner = CharRangeTokenizer(None, unichar_by_cat('Cf')).re
     data = formatControlCleaner.sub("", data)
     
