@@ -850,7 +850,71 @@ PTreeTokenNode                                                       <StringLite
 PTreeArgumentsNode                                               )
 PTreeBlockNode                                   }
 PTreeBlockNode                           }""")
-    
+
+
+    def test_functions(self):
+        self.check_parser("""
+function markFunction( fn ) {
+    fn[ expando ] = true;
+    return fn;
+}
+
+function createInputPseudo( type ) {
+    return function( elem ) {
+        var name = elem.nodeName.toLowerCase();
+        return name === "input" && elem.type === type;
+    };
+}""", """
+PTreeFunctionDeclarationNode         function
+PTreeTokenNode                           <Identifier: u'markFunction'>
+PTreeFunctionDeclarationNode         (
+PTreeTokenNode                           <Identifier: u'fn'>
+PTreeFunctionDeclarationNode         )
+PTreeFunctionDeclarationNode         {
+PTreeExpressionStatementNode             ;
+PTreeAssignmentExpressionNode                =
+PTreeTokenNode                                   <Identifier: u'fn'>
+PTreeMemberSelectorsNode                             .
+PTreeTokenNode                                           <Identifier: u'expando'>
+PTreeTokenNode                                   <BooleanLiteral: u'true'>
+PTreeReturnStatementNode                 return
+PTreeTokenNode                               <Identifier: u'fn'>
+PTreeFunctionDeclarationNode         }
+PTreeFunctionDeclarationNode         function
+PTreeTokenNode                           <Identifier: u'createInputPseudo'>
+PTreeFunctionDeclarationNode         (
+PTreeTokenNode                           <Identifier: u'type'>
+PTreeFunctionDeclarationNode         )
+PTreeFunctionDeclarationNode         {
+PTreeReturnStatementNode                 return
+PTreeFunctionExpressionNode                  function
+PTreeFunctionExpressionNode                  (
+PTreeTokenNode                                   <Identifier: u'elem'>
+PTreeFunctionExpressionNode                  )
+PTreeFunctionExpressionNode                  {
+PTreeVariableStatementNode                       var
+PTreeTokenNode                                       <Identifier: u'name'>
+PTreeCallNode                                            call
+PTreeTokenNode                                               <Identifier: u'elem'>
+PTreeMemberSelectorsNode                                         .
+PTreeTokenNode                                                       <StringLiteral: u'nodeName'>
+PTreeMemberSelectorsNode                                         .
+PTreeTokenNode                                                       <StringLiteral: u'toLowerCase'>
+PTreeArgumentsNode                                               (
+PTreeArgumentsNode                                               )
+PTreeReturnStatementNode                         return
+PTreeBinaryOpNode                                    &&
+PTreeBinaryOpNode                                        ===
+PTreeTokenNode                                               <Identifier: u'name'>
+PTreeTokenNode                                               <StringLiteral: u'"input"'>
+PTreeBinaryOpNode                                        ===
+PTreeTokenNode                                               <Identifier: u'elem'>
+PTreeMemberSelectorsNode                                         .
+PTreeTokenNode                                                       <StringLiteral: u'type'>
+PTreeTokenNode                                               <Identifier: u'type'>
+PTreeFunctionExpressionNode                  }
+PTreeFunctionDeclarationNode         }""")
+
     
     def test_regression(self):
         self.check_parser("/* double \n */ i; /* multi\nline */", """
