@@ -964,6 +964,7 @@ PTreeTokenNode                           <Identifier: u'i'>""")
 
     
     def test_exceptions(self):
+        self.assertRaises(parse.ParseError, self.check_parser, "")
         self.assertRaises(parse.ParseError, self.check_parser, "x\n++;")
         self.assertRaises(parse.ParseError, self.check_parser, "x++\n++;")
         self.assertRaises(parse.ParseError, self.check_parser, "x++\n --;")

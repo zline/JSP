@@ -163,7 +163,7 @@ class Parser(object):
     __metaclass__ = ABCMeta
     
     def parse(self, toks, start):
-        start = self.pre_parse(toks, start)
+        start = self.pre_parse(toks, start) # FIXME remove, if no longer needed
         assert start <= len(toks)
         if start == len(toks):
             return None
@@ -174,12 +174,6 @@ class Parser(object):
         """
         should return new starting position
         """
-        if not getattr(self, 'keep_line_terms', False):
-            while (start < len(toks)):
-                if type(toks[start]) != tokenize.LineTerminator:
-                    break
-                start += 1
-        
         return start
     
     @abstractmethod
@@ -194,12 +188,21 @@ class TokenParser(Parser):
     """
     Matches specified token class(es) (or subclass(es)) and optionally specified token data
     """
-    def __init__(self, tok_isinstance, tok_data=None):
+    def __init__(self, tok_isinstance, tok_data=None, keep_line_terms=False):
         self.tok_isinstance = tok_isinstance
         self.tok_data = tok_data
+        self.keep_line_terms = keep_line_terms
         self._multitoks = isinstance(self.tok_data, (list, tuple))
 
     def do_parse(self, toks, start):
+        if not self.keep_line_terms:
+            while start < len(toks) and type(toks[start]) == tokenize.LineTerminator:
+                start += 1
+        
+        assert start <= len(toks)
+        if start == len(toks):
+            return None
+        
         tok = toks[start]
         
         # type check
@@ -364,10 +367,6 @@ class LookAheadParser(Parser):
         ret = self.subparser.parse(toks, start)
         success = (ret is None) if self.inverse else (ret is not None)
         return None if not success else (None, start)
-
-def keep_line_terms(parser):
-    setattr(parser, 'keep_line_terms', True)
-    return parser
 
 
 class ArrayLiteralParser(SeqParser):
@@ -540,14 +539,14 @@ class NewExpressionParser(AltParser):
 
 class PostfixExpressionParser(SeqParser):
     def __init__(self, LeftHandSideExpression):
-        token_parser = keep_line_terms(TokenParser(tokenize.Punctuator, (u"++", u"--")))
+        token_parser = TokenParser(tokenize.Punctuator, (u"++", u"--"), keep_line_terms=True)
         super(PostfixExpressionParser, self).__init__((
             LeftHandSideExpression,
-            keep_line_terms(RepeatedParser(
+            RepeatedParser(
                 token_parser,
                 min_matches=0,
                 node_class=list
-            ))
+            )
         ))
     
     def mknode(self, subtree_list):
@@ -791,7 +790,7 @@ class ControlStatementParser(SeqParser):
     def __init__(self, ctrl_keyword, ctrl_option_parser, node_class, opt_required=False):
         super(ControlStatementParser, self).__init__((
             TokenParser(tokenize.Keyword, ctrl_keyword),
-            keep_line_terms(LookAheadParser(keep_line_terms(TokenParser(tokenize.LineTerminator)), inverse=True)),
+            LookAheadParser(TokenParser(tokenize.LineTerminator, keep_line_terms=True), inverse=True),
             ctrl_option_parser if opt_required else OptParser(ctrl_option_parser),
             TokenParser(tokenize.Punctuator, u";")
         ))
