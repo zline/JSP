@@ -6,6 +6,9 @@ from abc import ABCMeta, abstractmethod
 from collections import defaultdict
 
 
+class TokenizeError(ValueError):
+    pass
+
 def init_tokenize():
     global _TOKENIZERS
     global LineTerminator_tk
@@ -89,7 +92,7 @@ def tokenize(data):
                 best_tkzer = tkzer
         
         if best_tkzer is None:
-            raise RuntimeError("cant parse starting at byte {}: {}...".format(
+            raise TokenizeError("cant parse starting at byte {}: {}...".format(
                 start, data[start : start + 32]))
         
         tok = best_tkzer.get_next_tok()

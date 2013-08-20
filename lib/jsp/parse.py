@@ -5,6 +5,9 @@ from abc import ABCMeta, abstractmethod
 from jsp import tokenize
 
 
+class ParseError(ValueError):
+    pass
+
 def init_parse():
     global _PARSER
     
@@ -141,11 +144,11 @@ def parse(toks):
     global _PARSER
     ret = _PARSER.parse(toks, 0)
     if ret is None:
-        raise RuntimeError("cant parse anything")
+        raise ParseError("cant parse anything")
     (ptree, end) = ret
     assert end <= len(toks)
     if end < len(toks) and filter(lambda tok: type(tok) != tokenize.LineTerminator, toks[end:]):
-        raise RuntimeError("cant parse starting at token {}: {}...".format(
+        raise ParseError("cant parse starting at token {}: {}...".format(
             end, tuple(toks[end : end + 10])))
 
     return ptree
@@ -788,7 +791,7 @@ class ControlStatementParser(SeqParser):
     def __init__(self, ctrl_keyword, ctrl_option_parser, node_class, opt_required=False):
         super(ControlStatementParser, self).__init__((
             TokenParser(tokenize.Keyword, ctrl_keyword),
-            keep_line_terms(LookAheadParser(TokenParser(tokenize.LineTerminator), inverse=True)),
+            keep_line_terms(LookAheadParser(keep_line_terms(TokenParser(tokenize.LineTerminator)), inverse=True)),
             ctrl_option_parser if opt_required else OptParser(ctrl_option_parser),
             TokenParser(tokenize.Punctuator, u";")
         ))

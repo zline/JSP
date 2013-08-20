@@ -261,6 +261,19 @@ PTreeTokenNode                                           <Identifier: u'x'>
 PTreeBinaryOpNode                                        *
 PTreeTokenNode                                               <Identifier: u'y'>
 PTreeTokenNode                                               <Identifier: u'z'>""")
+        self.check_parser('\n\ntrue\n \n==\n \nw\n \n<\n \n2\n \n<<\n \nx\n \n+\n \ny\n \n*\n \nz\n;\n\n', """
+PTreeExpressionStatementNode         ;
+PTreeBinaryOpNode                        ==
+PTreeTokenNode                               <BooleanLiteral: u'true'>
+PTreeBinaryOpNode                            <
+PTreeTokenNode                                   <Identifier: u'w'>
+PTreeBinaryOpNode                                <<
+PTreeTokenNode                                       <NumericLiteral: u'2'>
+PTreeBinaryOpNode                                    +
+PTreeTokenNode                                           <Identifier: u'x'>
+PTreeBinaryOpNode                                        *
+PTreeTokenNode                                               <Identifier: u'y'>
+PTreeTokenNode                                               <Identifier: u'z'>""")
         
         self.check_parser('y & z;', """
 PTreeExpressionStatementNode         ;
@@ -333,6 +346,17 @@ PTreeTokenNode                                           <Identifier: u'x'>
 PTreeTokenNode                                           <Identifier: u'i'>
 PTreeTokenNode                                   <Identifier: u'foo'>
 PTreeTokenNode                               <StringLiteral: u'"bar"'>""")
+        self.check_parser('\ny\n \n*=\n \nx\n \n<\n \ni\n \n,\n \nfoo\n,\n \n"bar"\n;\n', """
+PTreeExpressionStatementNode         ;
+PTreeBinaryOpNode                        ,
+PTreeBinaryOpNode                            ,
+PTreeAssignmentExpressionNode                    *=
+PTreeTokenNode                                       <Identifier: u'y'>
+PTreeBinaryOpNode                                    <
+PTreeTokenNode                                           <Identifier: u'x'>
+PTreeTokenNode                                           <Identifier: u'i'>
+PTreeTokenNode                                   <Identifier: u'foo'>
+PTreeTokenNode                               <StringLiteral: u'"bar"'>""")
 
 
     def test_statements(self):
@@ -367,12 +391,7 @@ PTreeTokenNode                                                   <Identifier: u'
 PTreeArgumentsNode                                           )
 PTreeBlockNode                       }""")
 
-        self.check_parser("""
-var doc = node ? node.ownerDocument || node : preferredDoc,
-    parent = doc.defaultView;
-var j,
-    matchIndexes = fn( [], seed.length, argument ),
-    i = matchIndexes.length;""", """
+        etalon = """
 PTreeVariableStatementNode           var
 PTreeTokenNode                           <Identifier: u'doc'>
 PTreeConditionalExpressionNode               ?
@@ -405,7 +424,19 @@ PTreeArgumentsNode                                   )
 PTreeTokenNode                           <Identifier: u'i'>
 PTreeTokenNode                               <Identifier: u'matchIndexes'>
 PTreeMemberSelectorsNode                         .
-PTreeTokenNode                                       <StringLiteral: u'length'>""")
+PTreeTokenNode                                       <StringLiteral: u'length'>"""
+        self.check_parser("""
+var doc = node ? node.ownerDocument || node : preferredDoc,
+    parent = doc.defaultView;
+var j,
+    matchIndexes = fn( [], seed.length, argument ),
+    i = matchIndexes.length;""", etalon)
+        self.check_parser("""\n
+var\n \ndoc\n \n=\n \nnode\n \n?\n \nnode\n.\nownerDocument\n \n||\n \nnode\n \n:\n \npreferredDoc\n,
+    \nparent\n \n=\n \ndoc\n.\ndefaultView\n;\n
+var\n \nj\n,\n
+    matchIndexes\n \n=\n \nfn\n(\n \n[\n]\n, \nseed\n.\nlength\n,\n \nargument\n )\n,
+    i\n \n=\n \nmatchIndexes\n.\nlength\n;\n\n""", etalon)
 
         self.check_parser(";", """
 PTreeEmptyStatementNode              ;""")
@@ -454,15 +485,7 @@ PTreeTokenNode                                   <Identifier: u'temp'>
 PTreeArrayLiteralNode                            [
 PTreeArrayLiteralNode                            ]""")
 
-        self.check_parser("""
-while ( i-- ) {
-    if ( !matchers[i]( elem, context, xml ) ) {
-        return false;
-    }
-}
-do {
-    cur = cur[ dir ];
-} while ( cur && cur.nodeType !== 1 );""", """
+        etalon = """
 PTreeWhileStatementNode              while
 PTreePostfixExpressionNode               --
 PTreeTokenNode                               <Identifier: u'i'>
@@ -501,7 +524,25 @@ PTreeBinaryOpNode                            !==
 PTreeTokenNode                                   <Identifier: u'cur'>
 PTreeMemberSelectorsNode                             .
 PTreeTokenNode                                           <StringLiteral: u'nodeType'>
-PTreeTokenNode                                   <NumericLiteral: u'1'>""")
+PTreeTokenNode                                   <NumericLiteral: u'1'>"""
+        self.check_parser("""
+while ( i-- ) {
+    if ( !matchers[i]( elem, context, xml ) ) {
+        return false;
+    }
+}
+do {
+    cur = cur[ dir ];
+} while ( cur && cur.nodeType !== 1 );""", etalon)
+        self.check_parser("""
+while\n \n(\n \ni--\n \n)\n \n{
+    if\n \n(\n \n!\nmatchers\n[\ni\n]\n(\n elem\n,\n context\n,\n xml \n)\n )\n \n{
+        \nreturn false\n;\n
+    \n}\n
+\n}\n
+\ndo\n \n{\n
+    \ncur\n \n=\n cur\n[\n dir \n]\n;\n
+\n}\n while \n(\n cur\n && \ncur\n.\nnodeType \n!== \n1 \n)\n;\n""", etalon)
 
         self.check_parser("""
 for ( ; n; n = n.nextSibling ) {
@@ -920,14 +961,27 @@ PTreeFunctionDeclarationNode         }""")
         self.check_parser("/* double \n */ i; /* multi\nline */", """
 PTreeExpressionStatementNode         ;
 PTreeTokenNode                           <Identifier: u'i'>""")
+
+    
+    def test_exceptions(self):
+        self.assertRaises(parse.ParseError, self.check_parser, "x\n++;")
+        self.assertRaises(parse.ParseError, self.check_parser, "x++\n++;")
+        self.assertRaises(parse.ParseError, self.check_parser, "x++\n --;")
+        self.assertRaises(parse.ParseError, self.check_parser, "x\n \n -- ;")
+        self.assertRaises(parse.ParseError, self.check_parser, "continue\n;")
+        self.assertRaises(parse.ParseError, self.check_parser, "break\n;")
+        self.assertRaises(parse.ParseError, self.check_parser, "break\nfoo;")
+        self.assertRaises(parse.ParseError, self.check_parser, "return\n0;")
+        self.assertRaises(parse.ParseError, self.check_parser, "throw\ne;")
     
     
-    def check_parser(self, source, etalon):
+    def check_parser(self, source, etalon=None):
         ptree = parse.parse(tokenize.tokenize(source))
         output = cStringIO.StringIO()
         parse.PTreeNode.simple_dump(ptree, fh=output)
         try:
-            self.assertEqual(output.getvalue().strip(), etalon.strip())
+            if etalon is not None:
+                self.assertEqual(output.getvalue().strip(), etalon.strip())
         finally:
             output.close()
 
