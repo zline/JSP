@@ -469,59 +469,45 @@ class MemberAccessParser(AltParser):
             MemberAccessByIdentifierParser()
         ))
 
-class MemberExpressionParser(Parser):
+class MemberExpressionParser(SeqParser):
     def __init__(self, PrimaryExpression, FunctionExpression, AssignmentExpression, Expression):
         # PrimaryExpression, FunctionExpression - non-recursive, CtorParser - finite recursion
-        self._basic = AltParser((PrimaryExpression, FunctionExpression, CtorParser(self, AssignmentExpression)))
-        self._member_access_repeated = RepeatedParser(
+        basic = AltParser((PrimaryExpression, FunctionExpression, CtorParser(self, AssignmentExpression)))
+        member_access_repeated = RepeatedParser(
             MemberAccessParser(Expression),
-            node_class=list,    # hack, see do_parse
+            node_class=list,    # hack, see mknode
         )
-
-    def do_parse(self, toks, start):
-        ret = self._basic.parse(toks, start)
-        if ret is None:
-            return None
-        obj = ret[0]
-        start = ret[1]
+        super(MemberExpressionParser, self).__init__((basic, member_access_repeated), optional_right_items=1)
+    
+    def mknode(self, subtree_list):
+        if subtree_list[1] is None:
+            return subtree_list[0]
         
-        ret = self._member_access_repeated.parse(toks, start)
-        if ret is None:
-            return (obj, start) # no access
-        
-        return (PTreeMemberSelectorsNode(obj, ret[0]), ret[1])
+        return PTreeMemberSelectorsNode(subtree_list[0], subtree_list[1])
 
-class CallExpressionParser(Parser):
+class CallExpressionParser(SeqParser):
     def __init__(self, MemberExpression, AssignmentExpression, Expression):
-        self._arg_parser = ArgumentsParser(AssignmentExpression)
-        self._basic = SeqParser((MemberExpression, self._arg_parser), node_class=list)
-        
-        member_access_or_call = AltParser((MemberAccessParser(Expression), self._arg_parser))
-        self._member_access_or_call_repeated = RepeatedParser(
+        arg_parser = ArgumentsParser(AssignmentExpression)
+        basic = SeqParser((MemberExpression, arg_parser), node_class=list)
+        member_access_or_call = AltParser((MemberAccessParser(Expression), arg_parser))
+        member_access_or_call_repeated = RepeatedParser(
             member_access_or_call,
-            node_class=list,    # hack, see do_parse
+            node_class=list,    # hack, see mknode
         )
+        super(CallExpressionParser, self).__init__((basic, member_access_or_call_repeated), optional_right_items=1)
 
-    def do_parse(self, toks, start):
-        ret = self._basic.parse(toks, start)
-        if ret is None:
-            return None
-        obj = ret[0]
-        obj = PTreeCallNode(obj[0], obj[1])
-        start = ret[1]
+    def mknode(self, subtree_list):
+        obj = PTreeCallNode(subtree_list[0][0], subtree_list[0][1])
+        if subtree_list[1] is None:
+            return obj
         
-        ret = self._member_access_or_call_repeated.parse(toks, start)
-        if ret is None:
-            return (obj, start) # no access or calls
-        
-        end = ret[1]
-        for action in ret[0]:
+        for action in subtree_list[1]:
             if isinstance(action, PTreeArgumentsNode):
                 obj = PTreeCallNode(obj, action)
             else:
-                obj = PTreeMemberSelectorsNode(obj, [action])   # conseqtive selectors could be combined into one node..
-            
-        return (obj, end)
+                obj = PTreeMemberSelectorsNode(obj, [action])   # consecutive selectors could be combined into one node..
+        
+        return obj
 
 class NewExpressionParser(AltParser):
     def __init__(self, MemberExpression):
@@ -863,7 +849,7 @@ class LabelledStatementParser(SeqParser):
         subtree_list[2].labels.add(subtree_list[0].token.data)
         return subtree_list[2]
 
-class TryStatementParser(Parser):
+class TryStatementParser(SeqParser):
     def __init__(self, Block):
         
         class CatchParser(SeqParser):
@@ -878,29 +864,40 @@ class TryStatementParser(Parser):
             def mknode(self, subtree_list):
                 return (subtree_list[2], subtree_list[4])
         
+        Catch = CatchParser()
         Finally = SeqParser((
             TokenParser(tokenize.Keyword, u"finally"),
             Block), pick_node=1)
         
-        self._parser = SeqParser((
+        super(TryStatementParser, self).__init__((
             TokenParser(tokenize.Keyword, u"try"),
             Block,
-            CatchParser(),
-            Finally), node_class=list, optional_right_items=2)
+            AltParser((
+                SeqParser((Catch, Finally), node_class=list),   # list
+                Catch,  # tuple
+                Finally # node
+            ))), node_class=list)
 
-    def do_parse(self, toks, start):
-        ret = self._parser.parse(toks, start)
-        if ret is None:
-            return None
-        (subtree_list, end) = ret
-        if subtree_list[2] is None and subtree_list[3] is None:
-            return None
+    def mknode(self, subtree_list):
+        block = subtree_list[1]
+        catch_finally = subtree_list[2]
+        if isinstance(catch_finally, list):
+            catch_identifier = catch_finally[0][0]
+            catch_block = catch_finally[0][1]
+            finally_block = catch_finally[1]
+        elif isinstance(catch_finally, tuple):
+            catch_identifier = catch_finally[0]
+            catch_block = catch_finally[1]
+            finally_block = None
+        elif isinstance(catch_finally, PTreeNode):
+            catch_identifier = None
+            catch_block = None
+            finally_block = catch_finally
+        else:
+            assert False
         
-        return (PTreeTryStatementNode(
-            block=subtree_list[1],
-            catch_identifier=None if subtree_list[2] is None else subtree_list[2][0],
-            catch_block=None if subtree_list[2] is None else subtree_list[2][1],
-            finally_block=subtree_list[3]), end)
+        return PTreeTryStatementNode(block=block, catch_identifier=catch_identifier,
+            catch_block=catch_block, finally_block=finally_block)
 
 class SourceElementsParser(RepeatedParser):
     def __init__(self, Statement, FunctionDeclaration):
