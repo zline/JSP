@@ -2,7 +2,7 @@
 import sys
 from abc import ABCMeta, abstractmethod
 
-from jsp import tokenize
+from jsp import tokenize, grammar
 
 
 class ParseError(ValueError):
@@ -156,6 +156,7 @@ def parse(toks):
 
 _PARSER = None
 
+
 class Parser(object):
     """
     Abstract syntactic parser
@@ -184,13 +185,12 @@ class Parser(object):
         raise NotImplementedError()
 
 
-class TokenParser(Parser):
+class TokenParser(grammar.TerminalOP, Parser):
     """
     Matches specified token class(es) (or subclass(es)) and optionally specified token data
     """
     def __init__(self, tok_isinstance, tok_data=None, keep_line_terms=False):
-        self.tok_isinstance = tok_isinstance
-        self.tok_data = tok_data
+        super(TokenParser, self).__init__(tok_isinstance=tok_isinstance, tok_data=tok_data)
         self.keep_line_terms = keep_line_terms
         self._multitoks = isinstance(self.tok_data, (list, tuple))
 
@@ -220,9 +220,9 @@ class TokenParser(Parser):
         
         return (PTreeTokenNode(tok), start+1)
 
-class ForwardDeclaredParser(Parser):
+class ForwardDeclaredParser(grammar.ForwardDeclarationOP, Parser):
     def __init__(self):
-        self.target = None
+        super(ForwardDeclaredParser, self).__init__()
     
     def parse(self, toks, start):
         return self.target.parse(toks, start)
@@ -230,12 +230,12 @@ class ForwardDeclaredParser(Parser):
     def do_parse(self, toks, start):
         assert False, 'should not be reached'
 
-class AltParser(Parser):
+class AltParser(grammar.AlternativesOP, Parser):
     """
     Matches first matched alternative subparser
     """
     def __init__(self, alternatives):
-        self.alternatives = alternatives
+        super(AltParser, self).__init__(alternatives=alternatives)
 
     def do_parse(self, toks, start):
         for alt in self.alternatives:
@@ -249,17 +249,15 @@ class AltParser(Parser):
     def change_node(self, ptree):
         return ptree
 
-class SeqParser(Parser):
+class SeqParser(grammar.SequenceOP, Parser):
     """
     Matches sequence of subparsers
     """
-    def __init__(self, subparsers, node_class=None, pick_node=None, 
-            optional_right_items=None, optional_left_items=None):
-        self.subparsers = subparsers
+    def __init__(self, subparsers, node_class=None, pick_node=None, **kwargs):
+        super(SeqParser, self).__init__(subops=subparsers, **kwargs)
+        self.subparsers = self.subops
         self.node_class = node_class
         self.pick_node = pick_node
-        self.optional_right_items = optional_right_items
-        self.optional_left_items = optional_left_items
 
     def do_parse(self, toks, start):
         subtree_list = list()
@@ -288,16 +286,15 @@ class SeqParser(Parser):
         else:
             raise RuntimeError("dunno how to construct node")
 
-class RepeatedParser(Parser):
+class RepeatedParser(grammar.RepetitionOP, Parser):
     """
     Matches specified number of repetitions of subparser
     """
     def __init__(self, subparser, min_matches=1, node_class=None, separator=None,
             include_separator_tree=False):
-        self.subparser = subparser
-        self.min_matches = min_matches
+        super(RepeatedParser, self).__init__(subop=subparser, min_matches=min_matches, separator=separator)
+        self.subparser = self.subop
         self.node_class = node_class
-        self.separator = separator
         self.include_separator_tree = include_separator_tree
     
     def do_parse(self, toks, start):
@@ -334,34 +331,36 @@ class RepeatedParser(Parser):
         # define node_class or override mknode
         return self.node_class(subtree_list)
 
-class EmptyParser(Parser):
+class EmptyParser(grammar.EmptyOP, Parser):
     """
     Always matches, consumes no tokens
     """
     def __init__(self, node_class):
+        super(EmptyParser, self).__init__()
         self.node_class = node_class
     
     def do_parse(self, toks, start):
         return (self.node_class(), start)
 
-class OptParser(Parser):
+class OptParser(grammar.OptionalOP, Parser):
     """
     Always matches, returns subparser results if it matches, (None, start) otherwise
     """
     def __init__(self, subparser):
-        self.subparser = subparser
+        super(OptParser, self).__init__(subop=subparser)
+        self.subparser = self.subop
     
     def do_parse(self, toks, start):
         ret = self.subparser.parse(toks, start)
         return (None, start) if ret is None else ret
 
-class LookAheadParser(Parser):
+class LookAheadParser(grammar.LookAheadOP, Parser):
     """
     Non-capturing match
     """
     def __init__(self, subparser, inverse=False):
-        self.subparser = subparser
-        self.inverse = inverse
+        super(LookAheadParser, self).__init__(subop=subparser, inverse=inverse)
+        self.subparser = self.subop
     
     def do_parse(self, toks, start):
         ret = self.subparser.parse(toks, start)
