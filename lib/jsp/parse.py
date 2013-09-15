@@ -153,6 +153,9 @@ def parse(toks):
 
     return ptree
 
+def root_parser():
+    return globals()['_PARSER']
+
 
 _PARSER = None
 

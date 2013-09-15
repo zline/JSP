@@ -1,0 +1,68 @@
+#!/usr/bin/env python
+
+import sys
+import os
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'lib'))
+
+import argparse
+
+from jsp import parse, grammar
+
+
+def main():
+    parser = argparse.ArgumentParser(description='Development tools.')
+    parser.add_argument('--print-grammar', action='store_true', 
+                help='print graph of grammar')
+
+    args = parser.parse_args()
+    
+    if args.print_grammar:
+        print_grammar()
+        return
+    
+    print >> sys.stderr, "action is not specified, see --help"
+    sys.exit(1)
+
+
+def print_grammar():
+    parse.init_parse()
+    grammar.convert_grammar(parse.root_parser(), GrammarPrinter).gprint(sys.stdout)
+
+class GrammarPrinter(object):
+    def __init__(self, op, level):
+        self.op = op
+        self.level = level
+    
+    def gprint(self, fh):
+        print >> fh, self._padding(), type(self.op).__name__, "({})".format(grammar.find_op_type(self.op).__name__)
+        
+        def is_subop(op):
+            return (isinstance(op, GrammarPrinter) 
+                or (isinstance(op, (list, tuple)) and filter(lambda o: isinstance(o, GrammarPrinter), op)))
+        recursive_props = filter(lambda pn: is_subop(getattr(self, pn)), self.prop_names)
+        
+        for std_prop in filter(lambda pn: pn not in recursive_props, self.prop_names):
+            print >> fh, self._padding(), std_prop, ':', getattr(self, std_prop)
+        
+        for prop_name in recursive_props:
+            print >> fh, self._padding(), prop_name, ':'
+            prop = getattr(self, prop_name)
+            if isinstance(prop, GrammarPrinter):
+                prop.gprint(fh)
+            else:
+                print >> fh, self._padding(), '['
+                for (idx, subop) in enumerate(prop):
+                    if idx:
+                        print >> fh
+                    if subop is None:
+                        print >> fh, self._padding(+1), '** recursion'
+                    else:
+                        subop.gprint(fh)
+                print >> fh, self._padding(), ']'
+    
+    def _padding(self, extra=0):
+        return "    " * (self.level + extra)
+
+
+if __name__ == '__main__':
+    main()

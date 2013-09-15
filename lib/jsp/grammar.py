@@ -78,4 +78,46 @@ class LookAheadOP(OP):
         self._check_operands([self.subop])
 
 
+OP_TYPES = (TerminalOP, ForwardDeclarationOP, AlternativesOP, SequenceOP, RepetitionOP, EmptyOP, OptionalOP,
+    LookAheadOP)
+
+def find_op_type(obj):
+    if not isinstance(obj, OP):
+        raise TypeError("obj is a non-OP: {}".format(obj))
+    for op_t in OP_TYPES:   # fixme is there a better way?
+        if isinstance(obj, op_t):
+            return op_t
+    assert False
+
+
+def convert_grammar(root, type_map, traversed_ids=None):
+    """
+    Converts grammar graph to a different type system.
+    type_map has to hold corresponding type for each type of OPs,
+    grammar op object will be passed as first parameter to corresponding type's constructor.
+    """
+    if traversed_ids is None:   # root of recursion
+        traversed_ids = set()
+        if not isinstance(type_map, dict):
+            # one type for all ops
+            type_map = dict((op, type_map) for op in OP_TYPES)
+
+    if id(root) in traversed_ids:
+        return
+    
+    converted = type_map[find_op_type(root)](root, level=len(traversed_ids))
+    converted.prop_names = tuple(root.prop_names)
+    traversed_ids = set(traversed_ids)  # copy
+    traversed_ids.add(id(root))
+    for prop_name in root.prop_names:
+        prop = getattr(root, prop_name)
+        if isinstance(prop, OP):
+            setattr(converted, prop_name, convert_grammar(prop, type_map, traversed_ids))
+        elif isinstance(prop, (list, tuple)) and filter(lambda so: isinstance(so, OP), prop):
+            converted_subops = map(lambda so: convert_grammar(so, type_map, traversed_ids), prop)
+            setattr(converted, prop_name, converted_subops if isinstance(prop, list) else tuple(converted_subops))
+        else:
+            setattr(converted, prop_name, prop)
+
+    return converted
 
